@@ -1,0 +1,202 @@
+---
+title: "应用回归分析 第一章作业"
+author:
+  - 邵智轩
+  - 1400012141
+  - 物理学院
+documentclass: ctexart
+output:
+  rticles::ctex:
+    fig_caption: no
+    number_sections: no
+    toc: no
+classoption: "hyperref,"
+---
+
+# 习题1.2
+
+```{r include=FALSE}
+library(alr4)
+library(knitr)
+```
+
+```{r,tidy=TRUE}
+library(alr4)#Hooker的数据在package‘alr4’中
+attach(Hooker)
+#1.2.1
+plot(bp,pres)#在第四版中，temp名称改为bp (boiling point)
+L1=lm(pres~bp)
+abline(L1)
+residualPlot(L1)
+```
+
+粗看起来，拟合的直线与数据匹配得比较密切，$R^2=0.992$。但是从Residual Plot中能看到明显的non-random 的“U型”pattern，这暗示我们应该对`pres`做非线性的变换。
+
+```{r,warning=FALSE}
+#1.2.2
+plot(bp,lpres)
+L2=lm(lpres~bp)
+abline(L2)
+attach(Forbes)
+lm.Forbes=lm(lpres~bp)
+detach(Forbes)
+abline(lm.Forbes,col='red',lty=2)
+legend('topleft',col=c('black','black','red'),pch=c('o',NA,NA),lty=c(NA,1,2),
+       legend=c("Hooker's data", "Hooker's line","Forbes's line"))
+```
+
+与“pres~bp”图相比，线性程度稍好。
+
+```{r,tidy=TRUE}
+#1.2.3
+kable(summary(L2)$coef)
+```
+
+`summary`给出了参数估计，$t$检验量，相应P 值。通过P值可以充分的理由拒绝$H_0:\beta_1=0$。另外从summary中也可看到$R^2=0.998$也说明$\log(pres)$与$bp$满足很好的线性关系。
+
+```{r,tidy=TRUE}
+kable(anova(L2))
+```
+
+方差分析给出的结果仍是以充足的理由拒绝$H_0:\beta_1=0$（与$t$检验等价）。
+
+```{r,tidy=TRUE}
+residualPlot(L2)
+```
+
+与1.2.1中的残差图相比，pattern并不明显，残差更接近一条水平线。
+
+```{r}
+#1.2.4
+kable(confint(L2))#截距和斜率95%的置信区间
+#1.2.5
+new <- data.frame(bp=c(185,212))
+kable(predict.lm(L2,new,interval = 'prediction',level=0.9))
+```
+
+```{r}
+#1.2.6
+kable(summary(lm.Forbes)$coef)
+kable(predict.lm(lm.Forbes,new,interval = 'prediction',level=0.9))
+```
+
+将简要对比总结如下表:
+
+|    |$\hat{\beta_0}$|$\hat{\beta_1}$|$\hat\sigma$|
+|:-----|:------:|:------:|:-----:|
+|Hooker|-44.4|0.9064|0.364|
+|Forbes|-42.1|0.8955|0.379|
+
+对比Forbes和Hooker的数据的拟合结果，以及在1.2.2的图中对比拟合直线，可以发现两者的结果非常接近。而Forbes的数据由于有一个可疑的outlier，残差估计量比Hooker大一些，导致对1.2.6中温度预测的90%置信区间也宽一些。
+
+# 习题1.4
+
+## 1.4.1
+
+RSS取最小值的充要条件是:
+$$\frac{\partial \mathrm{RSS}}{\partial \beta_1}=-2\sum (y_i - \beta_1 x_i)x_i=0$$
+解得$\hat{\beta_1}=\frac{\sum x_i y_i}{\sum x_i^2}$
+$$\mathrm E(\hat{\beta_1})=\frac{\sum x_i\mathrm{E}(Y_i)}{\sum x_i^2}=\frac{\sum x_i (\beta_1 x_i)}{\sum x_i^2}=\beta_1$$
+$$\mathrm{Var}(\hat{\beta_1})=\frac{1}{(\sum x_i^2)^2}(\sum x_i^2 \sigma^2)=\frac{1}{(\sum x_i^2)^2}(\sum x_i^2) \sigma^2=\frac{ \sigma^2}{\sum x_i^2}$$
+
+模型中有1个估计参数（$\beta_1$），所以$\hat{\sigma}^2$的自由度为$n-1$，其表达式为：
+$$\hat{\sigma}^2=\frac{\mathrm{RSS_0}}{n-1}$$ $$\mathrm{RSS_0}=\sum(y_i-\hat{\beta}_1 x_i)^2=\sum y_i^2-(\sum x_i y_i)^2/\sum x_i^2$$
+满足$n-1$个自由度的$\chi^2$分布，即$\hat{\sigma}^2\sim\frac{\sigma^2}{n-1}\chi^2(n-1)$，且为$\sigma^2$的无偏估计。
+
+## 1.4.2
+
+导出由(1.21)给出的较大模型的方差分析表，但用的是(1.39)的较小的模型。（由于$\sum \hat{e_i}\ne 0$，平方和分解公式并不成立。）
+
+|Source of Variation|Degree of freedom|Sum of squares|Mean squares|F statistic|
+|:-----|:------|:------|:-----|:-----|
+|截距|1|$\mathrm{SSint}=\mathrm{RSS}_0-\mathrm{RSS}=\sum [(\tilde \beta _1-\hat \beta_1)x_i+\tilde \beta _0]^2$|$\mathrm{SSint}/1$|$\frac{\mathrm{SSint}}{\mathrm{RSS}/(n-2)}$|
+|全模型残差|$n-2$|$\mathrm{RSS}=\sum (y_i - \tilde \beta_1 x_i-\tilde \beta_0)^2$|$\mathrm{RSS}/(n-2)$||
+|过原点模型残差|$n-1$|$\mathrm{RSS}_0=\sum(y_i-\hat{\beta}_1 x_i)^2$|||
+
+假设检验$H_0:y=\beta_1x+e$，$H_1:y=\beta_1 x +\beta_0 +e$，，使用$F$检验，
+$$F=\frac{\mathrm{SSint}}{\mathrm{RSS}/(n-2)}=\frac{\mathrm{RSS}_0-\mathrm{RSS}}{\tilde{\sigma}^2}$$
+
+使用$\beta_0=0$时的$t$检验
+
+$$T=\frac{\tilde\beta_0-0}{\mathrm{se}(\tilde\beta_0)}$$
+$$T^2=\frac{(\bar{y}-\tilde\beta_1 \bar{x})^2}{\tilde{\sigma}^2(1/n+\bar{x}^2/\mathrm{SXX})}=(\bar y - \tilde \beta _1\bar x)^2 \frac{n\cdot \mathrm{SXX}}{\tilde \sigma^2\sum x_i^2}$$
+
+将$\mathrm{SXX}$、$\mathrm{SXY}$、$\mathrm{SYY}$、$\mathrm{RSS}$、$\mathrm{RSS}_0$展开成$\sum x_i^2$、$\sum y_i^2$、$\sum x_i y_i$、$\bar x$、$\bar y$的函数：
+
+$$\mathrm{SYY}=\sum(y_i-\bar y)^2=\sum y_i^2- n \bar y^2$$
+$$\mathrm{SXX}=\sum x_i^2 - n \bar x^2$$
+$$\mathrm{SXY}=\sum (x_i-\bar x)(y_i-\bar y)=\sum x_i y_i -n \bar x \bar y$$
+$$\mathrm{RSS}=\mathrm{SYY}-\frac{\mathrm{SXY}^2}{\mathrm{SXX}}=\sum y_i^2- n \bar y^2-\frac{(\sum x_i y_i -n \bar x \bar y)^2}{\sum x_i^2 - n \bar x^2}$$
+$$\mathrm{RSS}_0=\sum y_i^2-\frac{(\sum x_i y_i)^2}{\sum x_i^2}$$
+
+$$F=\frac{\mathrm{RSS}_0-\mathrm{RSS}}{\tilde \sigma ^2}=\frac{n(\bar x\sum x_i y_i-\bar y\sum x_i^2)^2}{\tilde \sigma^2\sum x_i^2 \cdot\mathrm{SXX}}$$
+\begin{eqnarray*}
+T^2&=&\frac{n}{\tilde \sigma ^2\sum x_i^2\cdot \mathrm{SXX}} \cdot (\bar y - \frac{\mathrm{SXY}}{\mathrm{SXX}}\bar x)^2 \mathrm{SXX}^2\\
+&=&\frac{n}{\tilde \sigma^2\sum x_i^2\cdot \mathrm{SXX}} \cdot (\mathrm{SXX}\cdot \bar y - \mathrm{SXY}\cdot\bar x)^2\\
+&=&\frac{n}{\tilde \sigma ^2\sum x_i^2\cdot \mathrm{SXX}} \cdot [(\sum x_i^2-n \bar x ^2)\cdot \bar y - (\sum x_i y_i -n \bar x \bar y)\cdot\bar x]^2\\
+&=&\frac{n}{\tilde \sigma^2 \sum x_i^2\cdot \mathrm{SXX}} \cdot (\bar y\sum x_i^2- \bar x\sum x_i y_i)^2\\
+&=&F
+\end{eqnarray*}
+
+从而$F=T^2$，在数值上等价。
+
+## 1.4.3
+
+```{r}
+attach(snake)
+m0<-lm(Y~X-1)
+summary(m0)
+```
+
+斜率$\hat\beta_1=0.5204$，标准差估计$\hat\sigma=1.7$，量纲均为$[1]$。
+
+```{r}
+kable(confint(m0))#斜率的置信区间
+kable(summary(lm(Y~X))$coef)
+```
+
+在零假设$H_0:\beta_0=0$下$P(|T|\ge |\frac{\hat\beta_0}{\mathrm{se}(\hat \beta_0)}|)=0.646$，故不拒绝原假设$H_0:\beta_0=0$。
+
+# 1.4.4
+
+```{r}
+residualPlot(m0)#作残差关于拟合值的图
+```
+
+两端的X取值偏离直线较多；残差没有明显的pattern，可以认为过原点的模型是比较合适的。
+
+```{r}
+sum(m0$residuals)#验证残差项之和不为0
+```
+
+# 1.9
+
+```{r}
+Amazon=read.csv("Amazon.csv",header = TRUE)
+attach(Amazon)
+#1.9.1
+plot(year,high,col='blue',ylim=c(16,28))#作high关于year，low关于year的散点图
+points(year,low,col='red',pch=2)
+legend('right',col=c('blue','red'),pch=c(1,2),legend=c('high','low'))
+#1.9.2
+kable(summary(lm(high~year))$coef)#high关于year的回归
+kable(summary(lm(low~year))$coef)#low关于year的回归
+kable(summary(lm(high~low))$coef)#high关于low的回归
+scatterplotMatrix(Amazon,smooth = F,spread = F)
+```
+
+以上回归系数中，high关于year，low关于year的斜率单位都为“m/year”，即平均每年水位变化多少米（上升为正，下降为负）。high关于low的回归斜率单位为“m/m”，即low每上升1米，high平均变化多少米。
+
+通过散点图矩阵和三组回归的P值，“low与high”和“low与year”的相关性很弱，可以认为不相关。而“high 与 year”表现出一定的相关性（P值显著地小于0.05）,斜率为$0.181 \mathrm{m/year}>0$，为亚马逊河径流量增大的假设给予了支持。
+
+## 1.9.3
+
+假设发展前高水位High_before\~$N(\mu_1,\sigma_1^2)$，发展后High_after\~$N(\mu_2,\sigma_2^2)$。可以作假设检验：NH:$\mu_1\ge \mu_2$ vs. AH:$\mu_1<\mu_2$。
+
+```{r}
+t.test(high[1:8],y=high[9:17],alternative = 'less')
+```
+
+有充足的理由接受备择假设，认为发展后（1970年后）的平均水位确实比发展前升高了（接近2米）。
+
+然而，我们无法将水位上升完全归因与森林砍伐。High对year的线性回归中，$R^2=0.582$。也就是说年份的变化（森林的破坏）虽然能解释很大一部分原因，但可能还有其他因素的贡献。
