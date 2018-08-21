@@ -1,0 +1,167 @@
+---
+title: "应用回归分析 第七章"
+author:
+  - 邵智轩
+  - 1400012141
+  - 物理学院
+documentclass: ctexart
+output:
+  rticles::ctex:
+    fig_caption: no
+    number_sections: no
+    toc: no
+classoption: "hyperref,"
+---
+
+# 7.11
+
+```{r,include=FALSE}
+library(alr4)
+attach(salary)
+```
+
+## 7.11.1
+
+原假设为“main effect model”，即RK与YR, DG, YD 没有交互项，$$\text{NH: }SL=\beta_{0}+\beta_{02} RK_2 +\beta_{03} RK_3+\beta_1 YR + \beta_2 DG +\beta_3 YD +e$$
+共$p=6$个参数
+
+```{r,warning=FALSE}
+library(alr4)
+lm.main <- lm(salary ~ rank + degree + year + ysdeg)
+```
+
+备择假设有RK与YR, DG, YD 有交互项（共$3\times 2 =6$项），
+\begin{eqnarray*}
+\text{AH: } SL&=&\beta_{0}+\beta_{02} RK_2 +\beta_{03} RK_3+\beta_1 YR + \beta_2 DG +\beta_3 YD\\&& +  \beta_{12}RK_2\cdot YR + \beta_{13} RK_3 \cdot YR + \beta_{22}RK_2 \cdot DG + \\&&\beta_{23}RK_3 \cdot DG + \beta_{32}RK_2 \cdot YD+\beta_{33} RK_3\cdot YD +e
+\end{eqnarray*}
+共$p=12$个参数。
+
+```{r}
+lm.interaction <- lm(salary ~ rank * degree + rank * year + rank * ysdeg)
+anova(lm.main, lm.interaction)
+Anova(lm.interaction)
+```
+
+$F$ 统计量并不显著（$p=0.299$），每一项交互项也都不显著，故不拒绝原假设。应认为交互项并不显著，不拒绝原假设：对于每一组`rank`，`year`、`degree`、`ysdeg``的不同对`salary`的调整是相同的。
+
+## 7.11.2 证明需要对响应变量`SL`变换，并找到该变换
+
+```{r}
+#使用所有的变量拟合模型
+lm.all <- lm(salary ~ rank + degree + year + ysdeg + sex)
+residualPlot(lm.all)
+```
+
+从残差图中看到明显的U型pattern，提示我们对$Y$做变换。
+
+```{r}
+boxCox(lm(salary ~ degree + year + ysdeg + sex))
+```
+
+$\hat \lambda\approx 0$，这与我们的直觉也是一致的。对`salary`作对数变换。
+
+```{r}
+salary.log <- log(salary)
+lm.log <- lm(salary.log ~ rank + degree + year + ysdeg + sex)
+residualPlot(lm.log)
+```
+
+此时残差图不再有明显的非线性痕迹。
+
+## 7.11.3 检验非常数方差
+
+```{r}
+e <- lm.log$residuals
+u <- e ^ 2 / mean(e ^ 2)
+```
+
+检验作为`salary`的一个函数
+
+```{r}
+lm.ncon.salary <- lm(u ~ salary.log + 1)
+SSreg.salary <- sum((lm.ncon.salary$fitted.values - mean(u)) ^ 2)
+S.salary <- SSreg.salary / 2
+S.salary
+pchisq(S.salary, df = 1, lower.tail = FALSE)
+```
+
+$p$值是显著的，我们可以再考察$r_i^2$关于$(1-h_{ii})z_i$的图
+
+```{r}
+r2 <- (lm.log$residuals / sigma(lm.log)) ^ 2 / (1 - hatvalues(lm.log)) #学生化内残差
+score.salary <- (1 - hatvalues(lm.log)) * salary.log
+plot(score.salary, r2)
+```
+
+有明显的楔形形状，表示有非常数方差。
+
+对于变量`sex`，可用同样的方法：
+
+```{r}
+lm.ncon.sex <- lm(u ~ sex + 1)
+SSreg.sex <- sum((lm.ncon.sex$fitted.values - mean(u)) ^ 2)
+S.sex <- SSreg.sex / 2
+S.sex
+pchisq(S.sex, df = 1, lower.tail = FALSE)
+```
+
+$p$值也是显著的，支持拒绝常数方差的假设。然而变量`sex`，不同于连续变量`salary`，它是一个binary factor，也许并不适合用刚才的方法检验，不如直接比较不同性别的残差的均方：
+
+```{r}
+c(mean(e[sex=="Male"]),mean(e[sex=="Female"]))
+c(mean(e[sex=="Male"]^2),mean(e[sex=="Female"]^2,mean(e^2)))
+boxplot(list("Male"=e[sex == "Male"], "Female"=e[sex == "Female"]),main="residuals")
+```
+
+可以看到，虽然两组的残差均值都为0，但男性的均方残差比女性的均方残差比均方残差小。从残差boxplot中也可看出，女性的残差大部分都集中在小于0的部分。
+
+```{r}
+boxplot(list("Male"=e[sex == "Male"]^2, "Female"=e[sex == "Female"]^2),main="squared residuals")
+```
+
+基于以上分析，我认为，两组的残差有明显的不同，非常数方差不成立。
+
+## 7.11.4 检验对变换后的薪水，在每种职位中，性别的差别是否一样。
+
+即检验，职位和性别的交互项`SX:RK`是否显著。
+
+$$\text{NH:}\quad \log SL=\beta_{0}+\beta_{02} RK_2 +\beta_{03} RK_3+\beta_1 YR + \beta_2 DG +\beta_3 YD + \beta_4 SX+e$$
+\begin{eqnarray*}
+\text{AH:}\quad \log SL&=&\beta_{0}+\beta_{02} RK_2 +\beta_{03} RK_3+\beta_1 YR + \beta_2 DG \\&&+\beta_3 YD + \beta_4 SX + \beta_{42} SX\cdot RK_2+ \beta_{43} SX \cdot RK_3+e
+\end{eqnarray*}
+
+```{r}
+lm.log.ia <- lm(salary.log ~ rank * sex + degree + year + ysdeg)
+Anova(lm.log.ia)
+```
+
+交互项并不显著，故不拒绝原假设。应认为，在每种职位中，性别引起的薪水差别是几乎相同的。
+
+## 7.11.5
+
+```{r}
+summary(lm(salary~sex))$coef
+```
+
+虽然男性平均工资比女性高，且差异是显著的，但是这时没有考虑其他因素的影响，有可能是其他因素导致的，并不能认为单纯由于性别引起了工资差异。
+
+```{r}
+summary(lm.log) #sex项不显著
+confint(lm.log,c('sexFemale'))
+```
+
+模型 $\log$`salary ~ rank + degree + year + ysdeg + sex`中，`sexFemale`项系数不显著，其95%置信区间为$[-3.1\%,11.1\%]$，这一系数正是性别引起的薪水的相对变化：
+$$\Delta \log SL\approx\frac{\Delta SL}{SL}$$
+故在法庭上可以汇报如下：
+
+”虽然男性平均工资比女性高，且差异是显著的，但是这没有考虑其他因素的影响，有可能是其他变量导致的，并不能认为单纯由于性别引起了薪水差异。
+
+“在考虑了职称，最高学历，性别，在职年数，获最高学历后年数这五个变量的模型中，女性与男性的收入差距的95%置信区间是包含0的。也就是说，我们没有充足的证据证明性别对薪水有直接影响；这一系数的点估计是正的，说明在调整了其他变量的影响后，其实女性有更高的平均薪水，虽然这一正效应并不显著。”
+
+## 7.11.6
+
+```{r}
+summary(update(lm.log, ~ . - rank))
+```
+
+在去掉了认为“被污染”的`rank`后，女性的影响变成了负的，但仍不显著。
