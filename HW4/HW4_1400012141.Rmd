@@ -1,0 +1,109 @@
+---
+title: "应用回归分析 HW4"
+author:
+  - 邵智轩
+  - 物理学院
+  - 1400012141
+documentclass: ctexart
+output:
+  rticles::ctex:
+    fig_caption: no
+    number_sections: no
+    toc: no
+classoption: "hyperref,"
+---
+
+# 4.5
+
+$$\mathrm{RSS}_{NH}=\sum_{i=1}^n(y_i-x_i)^2,\ df_{NH}=n$$
+$$\mathrm{RSS}_{AH}=\sum_{i=1}^n(y_i-\hat{\beta_0}-\hat{\beta_1}x_i)^2,\ df_{AH}=n-2$$
+$$F=\frac{(\mathrm{RSS}_{NH}-\mathrm{RSS}_{AH})/(df_{NH}-df_{AH})}{\mathrm{RSS}_{AH}/df_{AH}}=\frac{\mathrm{SSreg}/df_{reg}}{\mathrm{RSS}_{AH}/df_{AH}}\sim F(df_{reg},df_{AH})$$
+其中，$df_{reg}=df_{NH}-df_{AH}=2$，$\mathrm{SSreg}=\mathrm{RSS}_{NH}-\mathrm{RSS}_{AH}=\sum_{i=1}^n(x_i-\hat{\beta_0}-\hat{\beta_1} x_i)^2$。
+
+# 4.6
+
+## 4.6.1
+
+```{r,tidy=TRUE}
+library(alr3)
+attach(snowgeese)
+opar<-par(mfrow=c(1,2))
+plot(obs1,photo,col='red')
+abline(a=0,b=1)
+plot(obs2,photo,col='blue')
+abline(a=0,b=1)
+```
+
+从这两张散点图中可以看出，误差似乎有随$X_1$或$X_2$增大而增大的趋势，这与简单线性回归中误差等方差的假设似乎不符。但$E[Y|X]$与$X$确实显示出较强的线性关系。
+
+在$Y$关于$X_1$或$X_2$的简单线性回归模型中，误差项$e=Y-\mathrm{E}[Y|X]=Y-X\beta$测量的是真实的$Y$（照片记录的准确雪鹅数）与$X\beta$（通过目测估计的雪鹅数对真实雪鹅数的预测）之差。
+
+之所以用$Y$关于$X_1$或$X_2$作回归而非相反，是考虑到这项研究的目的是“研究目测方法的可靠性”，即试图通过目测的雪鹅数预测真实的雪鹅数。在这里，$X_1$和$X_2$是起解释作用的因变量（predictor），而$Y$作为真实值是结果（response）。只有做$Y$对$X$的拟合才能将误差$e$解释为前述的“真值与预测值之差”。
+
+## 4.6.2
+
+```{r,tidy=TRUE}
+l1<-lm(photo~obs1)
+l1
+RSS.NH<-sum((photo-obs1)^2)
+RSS.AH<-sum(l1$residuals^2)
+F1<-((RSS.NH-RSS.AH)/(45-43))/(RSS.AH/43)
+F1
+pf(F1,2,43)
+l2<-lm(photo~obs2)
+l2
+RSS.NH<-sum((photo-obs2)^2)
+RSS.AH<-sum(l2$residuals^2)
+F2<-((RSS.NH-RSS.AH)/(45-43))/(RSS.AH/43)
+F2
+pf(F2,2,43)
+```
+
+习题4.5中零假设的意义为$E[Y|X]=X$，即真实的雪鹅数的期望就是观察者目测估计的雪鹅数，那么可以直接用他目测的数值来预测真实的值。一个可靠的观察者的预测模型，应该是非常接近原假设的模型的。那么就要求AH与NH的区别要小，即F-statistics值要小。
+
+然而这两位预测者的F值都很大，p值分别为0.0114357和$6.9\times 10^{-5}$，都应该拒绝原假设，认为不能用它们的目测值来直接预测真实值。虽说两个人都不靠谱，但是第一个观察者相对可靠一些，因为他p值相对较小，而且他的AH模型下拟合的斜率确实更接近1。
+
+## 4.6.3
+
+```{r,tidy=TRUE}
+obs1.sqrt<-sqrt(obs1)
+obs2.sqrt<-sqrt(obs2)
+photo.sqrt<-sqrt(photo)
+l1.sqrt<-lm(photo.sqrt~obs1.sqrt)
+l1.sqrt
+RSS.NH<-sum((photo.sqrt-obs1.sqrt)^2)
+RSS.AH<-sum(l1.sqrt$residuals^2)
+F1.sqrt<-((RSS.NH-RSS.AH)/(45-43))/(RSS.AH/43)
+F1.sqrt
+pf(F1.sqrt,2,43)
+l2.sqrt<-lm(photo.sqrt~obs2.sqrt)
+l2.sqrt
+RSS.NH<-sum((photo.sqrt-obs2.sqrt)^2)
+RSS.AH<-sum(l2.sqrt$residuals^2)
+F2.sqrt<-((RSS.NH-RSS.AH)/(45-43))/(RSS.AH/43)
+F2.sqrt
+pf(F2.sqrt,2,43)
+```
+
+做了变换后，对这两个观察者，仍然拒绝原假设，不能直接用观察者的目测值预测真实值。
+
+## 4.6.4
+
+```{r,tidy=TRUE}
+l1.weighted<-lm(photo~obs1,weights = 1/obs1)#wi=1/xi
+l1.weighted
+RSS.NH<-sum((1/obs1)*(photo-obs1)^2)
+RSS.AH<-sum(1/obs1*l1.weighted$residuals^2)
+F1.weighted<-((RSS.NH-RSS.AH)/(45-43))/(RSS.AH/43)
+F1.weighted
+pf(F1.weighted,2,43)
+l2.weighted<-lm(photo~obs2,weights = 1/obs2)#wi=1/xi
+l2.weighted
+RSS.NH<-sum((1/obs2)*(photo-obs2)^2)
+RSS.AH<-sum(1/obs2*l2.weighted$residuals^2)
+F2.weighted<-((RSS.NH-RSS.AH)/(45-43))/(RSS.AH/43)
+F2.weighted
+pf(F2.weighted,2,43)
+```
+
+可见，加权回归的AH模型仍然与NH模型差距很大。总之不能直接用观察者的目测估计值预测雪鹅数的真值。
