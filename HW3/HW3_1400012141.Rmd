@@ -1,0 +1,117 @@
+---
+title: "应用回归分析 HW3"
+author:
+  - 邵智轩
+  - 物理学院
+  - 1400012141
+documentclass: ctexart
+output:
+  rticles::ctex:
+    fig_caption: no
+    number_sections: no
+    toc: no
+classoption: "hyperref,"
+---
+
+# 3.2
+
+在二元正态分布下，
+$$y_i|x_i\sim\mathcal{N}\left(\mu_y+\rho_{xy} \frac{\sigma_y}{\sigma_x}(x_i-\mu_x),\sigma_y^2(1-\rho_{xy}^2)\right)$$
+
+那么$y$关于$x$的回归直线$\mathrm{E}[y|x]=\beta_0+\beta_1 x$中，截距$\beta_0=\mu_y-\beta_1 \mu_x$，斜率$\beta_1=\rho_{xy} \frac{\sigma_y}{\sigma_x}$。当$\beta_1\ne0$，即$\rho_{xy}\ne 0$时，反解出$y=\beta_0+\beta_1 x$，得到$x=\frac{1}{\beta_1}(y-\beta_0)$
+
+另一方面，
+$$x_i|y_i\sim\mathcal{N}\left(\mu_x+\rho_{xy} \frac{\sigma_x}{\sigma_y}(y_i-\mu_y),\sigma_x^2(1-\rho_{xy}^2)\right)$$
+那么$x$关于$y$的回归直线$\mathrm{E}[x|y]=\beta_0'+\beta_1'y$中，截距$\beta_0'=\mu_x-\beta_1' \mu_y$，斜率$\beta_1'=\rho_{xy} \frac{\sigma_x}{\sigma_y}$。
+
+显然，一般$\beta_1\beta_1'\ne1$。若要$\beta_1\beta_1'=1$，显然要求$\rho_{xy}^2=1$，$\rho_{xy}=\pm 1$。
+
+如果$\beta_1'=1/\beta_1$，那么$y$关于$x$的回归直线反解得到的$x$轴截距：
+$$-\frac{\beta_0}{\beta_1}=-\frac{\mu_y}{\beta_1}+\mu_x=\mu_x-\beta_1'\mu_y=\beta_0'$$
+即两直线完全相同。
+
+```{r include=FALSE}
+library(MASS)
+library(alr4)
+```
+
+```{r echo=FALSE}
+mu = c(10.0, 17.5)
+sigma = matrix(c(9, 11.251, 11.251, 23.0625), ncol = 2)
+sim = mvrnorm(n = 250, mu = mu, Sigma = sigma)
+plot(sim[, 1], sim[, 2])
+beta1 <- sigma[1, 2] / sigma[1, 1]
+beta1_ <- sigma[1, 2] / sigma[2, 2]
+beta0_ <- mu[1] - beta1_ * mu[2]
+abline(a = mu[2] - beta1 * mu[1], b = beta1, col = 'red', lty = 1) #y=beta1 x + beta0
+abline(a = -beta0_ / beta1_, b = 1 / beta1_, col = 'blue', lty = 2) #y=1/beta1_(x-beta0_)
+legend('topleft',col = c('red','blue'),lty = c(1,2),legend = c('regression of y on x','regression of x on y'))
+```
+
+# 3.3
+
+## 3.3.1
+
+```{r,warning=FALSE}
+library(alr4)
+attach(longley)
+GNP <- GNP * 1e3
+Unemployed <- Unemployed * 10
+Armed.Forces <- Armed.Forces * 10
+Population <- Population * 1e3
+Employed <- Employed * 1e3
+longley.lm <- lm(Employed ~ GNP.deflator + GNP + Unemployed + Armed.Forces + Population + Year)
+summary(longley.lm)
+```
+
+## 3.3.2 给出测量误差的估计下界
+
+对于变量$X_2$（GNP），单位为百万美元。若数据精确到个位，若认为舍入误差在$(-0.5,0.5)$上均匀分布，则通过均匀分布的方差$(b-a)^2/12$得到$X_2$的误差估计$s_2^2=1/12$（百万美元的平方）。
+
+对其他变量误差的下界估计几乎完全类似。除了对$X_1$的误差估计$s_1^2=0.01\times1/12$以外，其余自变量的误差下界估计都是$s_i^2=1/12,\ i=2,3,4,5$，单位为相应的单位的平方。
+
+对$X_6$（Year）的处理要复杂一些，因为年份通常不是四舍五入，而是向下取整的，即误差范围为$(0,1)$。如果认为误差是$(0,1)$上的均匀分布，则$\mathrm{E}[s_6]=0.5\ne0$，误差估计的下界为
+$$\mathrm{E}[(s_6-0)^2]=\int_0^1(x^2\cdot 1) \mathrm{d}x=\frac{1}{3}$$
+，单位为(Year$^2$)。非闰年为365天，闰年为366天，其影响基本可以忽略。
+
+## 3.3.3 模拟试验
+
+```{r,warning=FALSE}
+longley.sim <- function() {
+    GNP.deflator.sim <- GNP.deflator + runif(16, -0.05, 0.05)
+    GNP.sim <- GNP + runif(16, -0.5, 0.5)
+    Unemployed.sim <- Unemployed + runif(16, -0.5, 0.5)
+    Armed.Forces.sim <- Armed.Forces + runif(16, -0.5, 0.5)
+    Population.sim <- Population + runif(16, -0.5, 0.5)
+    Year.sim <- Year + runif(16, 0, 1)
+    longley.sim.lm <- lm(Employed ~ GNP.deflator.sim + GNP.sim + Unemployed.sim + Armed.Forces.sim + Population.sim + Year.sim)
+    longley.sim.lm$coef
+}
+
+N <- 100
+record=c()
+for (i in 1:N) {
+    record <- rbind(record, longley.sim())
+}
+record<-data.frame(record)
+summary(record)
+with(record, {
+    opar <- par(mfrow = c(2, 3))
+    hist(GNP.deflator.sim)
+    abline(v = longley.lm$coefficients['GNP.deflator'],col='red')
+    hist(GNP.sim)
+    abline(v = longley.lm$coefficients['GNP'], col = 'red')
+    hist(Unemployed.sim)
+    abline(v = longley.lm$coefficients['Unemployed'], col = 'red')
+    hist(Armed.Forces.sim)
+    abline(v = longley.lm$coefficients['Armed.Forces'], col = 'red')
+    hist(Population.sim)
+    abline(v = longley.lm$coefficients['Population'], col = 'red')
+    hist(Year.sim)
+    abline(v = longley.lm$coefficients['Year'], col = 'red')
+     })
+```
+
+图中的红线代表原来拟合的斜率。可以看到，加入随机误差后，各变量斜率的变化普遍非常大，甚至正负号都有变化。由于我假设年份的误差分布为$\mathcal{U}(0,1)$（有偏），年份原来的拟合系数甚至不在随机的100次的range中。
+
+这一实验说明了这样的问题：尽管原来拟合的$R^2$很高，但这并不能说明拟合出的系数是可信的。这一模型对很小的误差（即使只是误差的理论下界）也非常敏感。
