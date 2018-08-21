@@ -1,0 +1,234 @@
+---
+title: "应用回归分析 第六章"
+author:
+  - 邵智轩
+  - 1400012141
+  - 物理学院
+documentclass: ctexart
+output:
+  rticles::ctex:
+    fig_caption: no
+    number_sections: no
+    toc: no
+classoption: "hyperref,"
+---
+
+## 6.4.1
+```{r,include=FALSE}
+library(alr4)
+```
+```{r,warning=FALSE,tidy=TRUE}
+library(alr4)
+attach(stopping)
+#6.4.1
+plot(Distance ~ Speed)#Distance 关于 Speed 的散点图
+lm.0 <- lm(Distance ~ Speed)
+abline(lm.0,col='red')
+#summary(lm.0)
+residualPlot(lm.0)
+```
+
+残差图有明显的U型pattern，暗示非线性；而且残差的方差随拟合值增大。
+
+下面计算拟合失真的F检验。
+
+```{r}
+SSE <- function(X, Y) {
+    SUM <- 0
+    df <- 0
+    for (x in unique(X)) {
+        Yi <- Y[X == x]
+        n <- length(Yi)
+        SUM<-SUM+sum((Yi-mean(Yi))^2)
+        df <- df + n - 1
+    }
+    c(SUM, df)
+}
+SSpe <- SSE(Speed, Distance)
+SSreg <- sum(lm.0$residuals ^ 2)
+F.stat <- ((SSreg - SSpe[1]) / (lm.0$df.residual - SSpe[2])) / (SSpe[1] / SSpe[2])
+p.stat <- pf(F.stat, df1 = lm.0$df.residual - SSpe[2], df2 = SSpe[2],lower.tail = FALSE)
+p.stat
+```
+
+在$\alpha=0.05$的水平下是显著的，认为确实有拟合失真。
+
+## 6.4.2
+
+```{r}
+added.v <- Speed * log(Speed)
+lm.1 <- lm(Distance ~ Speed + added.v)
+summary(lm.1)
+```
+
+$X \ln X$的系数$\eta$的$t$检验显著，有理由认为变换$X$是必要的，，可按照公式(6.18)：$\hat\alpha=\frac{\hat \eta}{\hat \beta_1}+1$估计$\alpha$。
+
+```{r}
+avPlots(lm.1, terms = "added.v") #附加变量图
+alpha <- lm.1$coef["added.v"] / lm.0$coef["Speed"] + 1 
+alpha
+```
+
+$\alpha$ 接近2，表明我们应对$X$做平方变换。
+
+```{r}
+Speed.squared <- Speed ^ 2
+lm.2 <- lm(Distance ~ Speed.squared)
+plot(Distance ~ Speed)
+points(Speed, lm.2$fitted.values, type = 'l',col="brown")
+```
+
+通过与6.4.1的比较，这一模型（$\mathrm{E}[Y|X]=\beta_0+\beta_1 X^2$）的残差更小，而且直观来看也对数据点拟合得更好。
+
+## 6.4.3 Atkinson得分方法变换$Y$
+
+```{r}
+GM <- function(y) exp(mean(log(y)))
+G <- function(y) {
+    GM.y <- GM(y)
+    y * (log(y / GM.y) - 1) + log(GM.y) + 1
+}
+G.Distance <- G(Distance)
+lm.atk <- lm(Distance ~ Speed + G.Distance)
+summary(lm.atk) 
+```
+
+$G$的系数$\phi$是显著的。$\hat \lambda=1- \tilde \phi$
+
+```{r}
+avPlots(lm.atk,terms = "G.Distance")#Atkinson 得分方法的附加变量图
+lambda <- 1 - lm.atk$coef["G.Distance"]
+lambda
+```
+
+$\lambda\approx0.5$，应对$Y$做根号变换。下面用Box-Cox的似然方法，求估计的变换
+
+```{r}
+boxCox(lm.0) 
+```
+
+$L(\lambda)$是单峰的，最大值及95%置信区间都在0.5附近，同样暗示我们对$Y$做根号变换，与Atkinson得分方法是一致的。
+
+```{r}
+Distance.sqrt <- sqrt(Distance)
+lm.sqrty <- lm(Distance.sqrt ~ Speed)
+residualPlot(lm.sqrty)
+```
+
+可以看到，对响应变量$Y$变换后残差已不再有明显的Pattern。
+
+```{r}
+plot(Distance ~ Speed)
+points(Speed, lm.sqrty$fitted.values ^ 2, type = 'l', col = "brown") 
+```
+
+拟合的曲线与6.4.2中的拟合曲线很相似。
+
+## 6.4.4
+
+在6.4.2中的模型为 $Y=\beta_0+\beta_1 x^2+e,\quad \mathrm{Var}(e)=\sigma^2$，拟合结果已储存在`lm.2`中。下面拟合 6.4.4 的模型：$Y=\beta_1 x + \beta_2 x^2 + e,\quad \mathrm{Var}(e)=\sigma^2 x^2$
+
+```{r}
+lm.Hald <- lm(Distance ~ Speed + Speed.squared - 1,weights = 1/Speed.squared)
+summary(lm.Hald)
+plot(Distance ~ Speed)
+points(Speed, lm.2$fitted.values, type = 'l',lty=1, col = "red")
+points(Speed, lm.Hald$fitted.values, type = 'l', lty = 2, col = "blue")
+legend('topleft', legend = c('Model of 6.4.2', 'Model of 6.4.4'), col = c('red', 'blue'), lty = c(1, 2))
+```
+
+可以看到，$X$在0到40之间时，两个模型对$Y$的拟合值是很接近的。比如，我们可以考察它们最大的拟合值之差：
+
+```{r}
+max(abs(lm.Hald$fitted.values - lm.2$fitted.values))
+```
+
+对于6.4.2中的**预测值**，我们可以用公式
+$$\mathrm{Var}(\hat y|\mathbf{x}_*)=\sigma^2 \mathbf{x}_*'(\mathbf{X}'\mathbf{X})^{-1}\mathbf{x}_*$$
+（求它的估计只需把$\sigma^2$换成$\hat \sigma ^2$）。对$p'=p+1=2$可进一步化简：
+$$\mathrm{Var}(\hat y|x_*)=\sigma^2\left(\frac{1}{n}+\frac{(x_*-\bar x)^2}{\mathrm{SXX}}\right),\quad\mathbf{X}=(\mathbf{1},x)$$
+则模型6.4.2的**预测值**(fitted values)的标准误的为
+$$\mathrm{sefit}(\hat y|x_*)=\hat \sigma \sqrt{\frac{1}{n}+\frac{(x_*-\bar x)^2}{\mathrm{SXX}}}$$
+**预测** (prediction)的标准误为
+$$\mathrm{sepred}(\tilde y_*|x_*)=\hat \sigma \sqrt{1+\frac{1}{n}+\frac{(x_*-\bar x)^2}{\mathrm{SXX}}}$$
+可用如下程序计算6.4.2模型在任意点$x_*$的**预测值**的标准误以及**预测**的标准误。
+
+```{r}
+se.lm.2 <- function(x_new) {
+    sefit <- sigma(lm.2) * sqrt(1 / length(Speed) +
+                   (x_new - mean(Speed)) ^ 2 / sum((Speed - mean(Speed)) ^ 2))
+    sepred <- sqrt(sefit ^ 2 + sigma(lm.2) ^ 2)
+    c(sefit,sepred)
+}
+```
+
+模型6.4.4是加权最小二乘，**预测值**的方差为
+$$\mathrm{Var}(\hat y|\mathbf{x}_*)=\sigma^2 \mathbf{x}_*'(\mathbf{X}'\mathbf{W}\mathbf{X})^{-1}\mathbf{x}_*,\quad\mathbf{X}=(x,x^2),\quad\mathbf{W}_{ij}=\delta_{ij}\frac{1}{x_i^2}$$
+预测值的标准误：
+$$\mathrm{sefit}(\hat y|\mathbf{x}_*)=\hat \sigma\sqrt{ \mathbf{x}_*'(\mathbf{X}'\mathbf{W}\mathbf{X})^{-1}\mathbf{x}_*}$$
+预测的标准误：
+$$\mathrm{sepred}(\tilde y_*|\mathbf{x}_*)=\hat \sigma\sqrt{ \mathbf{x}_*'(\mathbf{X}'\mathbf{W}\mathbf{X})^{-1}\mathbf{x}_*}$$
+可用如下程序计算6.4.4模型在任意点$\mathbf{x}_*'=(x_*,x_*^2)$的**预测值**的标准误以及**预测**的标准误。
+
+```{r}
+se.lm.Hald <- function(Speed_new) {
+    x_new <- c(Speed_new, Speed_new ^ 2)
+    sefit <- sqrt(c(x_new %*% vcov(lm.Hald) %*% x_new))
+    sepred <- sqrt(sefit ^ 2 + sigma(lm.Hald) ^ 2 * x_new[2])
+    c(sefit,sepred)
+}
+```
+
+我们试图将模型外推到 $X = 60 \mathrm{mph}$
+
+```{r}
+newdata <- data.frame(Speed = seq(0, 60, 0.5), Speed.squared = (seq(0, 60, 0.5)) ^ 2)
+plot(newdata$Speed, predict(lm.2,newdata), type = 'l', lty = 1, col = "red")
+points(newdata$Speed, predict(lm.Hald, newdata), type = 'l', lty = 2, col = "blue")
+legend('topleft', legend = c('Model of 6.4.2', 'Model of 6.4.4'),
+       col = c('red', 'blue'), lty = c(1, 2))
+diff.of.pred <- predict(lm.2, newdata) - predict(lm.Hald, newdata)
+diff.of.pred[length(diff.of.pred)] 
+```
+
+从图中可以看到，在$X>40$的区域，两个模型的预测差别逐渐增大。在 $X = 60 \mathrm{mph}$ 处，两个模型对$Y$的预测值相差23.34英尺。然而我们若分别计算两个模型下在$X=60$处$Y$的**预测值**和**预测**的标准误：
+
+```{r}
+se.lm.2(60)#模型6.4.2下 X=60 的预测值和预测的标准误
+se.lm.Hald(60)#模型6.4.4下 X=60 的预测值和预测的标准误
+```
+
+可以看到，此时的预测值之差甚至已经大于两者的预测值标准误之和，两个模型在外推区域会给出明显不同的结论。
+
+## 6.4.5
+
+```{r}
+lm.Hald.cons <- lm(Distance ~ Speed + Speed.squared - 1) # 拟合常数方差的Hald模型
+```
+
+NH: $Y=\beta_1 x + \beta_2 x^2 +e,\quad \mathrm{Var}(e)=\sigma^2$
+
+AH: $Y=\beta_1 x + \beta_2 x^2 +e,\quad \mathrm{Var}(e_i)=\sigma^2\exp(\lambda^T\mathbf{z}_i)$，其中$\mathbf{z}_i'=(x_i,x_i^2)$
+
+按照教材 141 页的步骤，编写如下程序进行得分检验：
+
+```{r}
+e <- lm.Hald.cons$residuals #计算模型中Y关于所有X的回归，保存残差
+u <- e ^ 2 / mean(e ^ 2) #计算比例平方残差u
+lm.Hald.score <- lm(u ~ Speed + Speed.squared + 1) #计算u关于z包含截距的回归
+SSreg <- sum((lm.Hald.score$fitted.values - mean(u)) ^ 2) #计算回归平方和，自由度（不含截距）为2
+S <- SSreg / 2 #在NH下渐进分布为chisquared(2)
+S
+pchisq(S, df = 2, lower.tail = FALSE)
+```
+
+所以我们相当肯定有非常数方差。进一步通过图形考察。作$r_i^2$关于$(1-h_{ii})\lambda^T \mathbf{z}_i$的图。
+
+```{r}
+r2 <- (lm.Hald.cons$residuals / sigma(lm.Hald.cons)) ^ 2 / (1 - hatvalues(lm.Hald.cons))
+score.comb <- (1 - hatvalues(lm.Hald.cons)) * (lm.Hald.score$coefficients[2] * Speed
+    + lm.Hald.score$coefficients[3] * Speed.squared)
+plot(score.comb, r2)
+```
+
+可以看到明显的楔形形状，应拒绝NH。
