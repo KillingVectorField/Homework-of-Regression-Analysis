@@ -1,0 +1,174 @@
+---
+title: "应用回归分析 第 9 章"
+author:
+  - 邵智轩
+  - 1400012141
+  - 物理学院
+documentclass: ctexart
+output:
+  rticles::ctex:
+    fig_caption: no
+    number_sections: no
+    toc: no
+classoption: "hyperref,"
+header-includes:
+  - \usepackage{mathtools}
+  - \usepackage{amsmath,amsfonts,amssymb,amsthm,bm,upgreek}
+  - \usepackage[mathscr]{eucal}
+---
+
+# 8.7
+
+## 8.7.1
+
+```{r,warning=FALSE}
+library(car)
+data<-alr4::dwaste
+n<-20
+data['O2UP.log']<-log10(data$O2UP)
+predictors<-c('BOD','TKN','TS','TVS','COD')
+predictors.powerset<-ggm::powerset(predictors)
+lm.tot<-lm(reformulate(predictors,response = "O2UP.log"),data=data)
+RSS.tot<-sum(lm.tot$residuals^2)
+sigma2<-RSS.tot/lm.tot$df.residual
+SYY<-with(data,sum((O2UP.log-mean(O2UP.log))^2))
+Cp_p<-data.frame('p'=integer(),
+                 'Cp'=numeric(),
+                 'R2'=numeric(),
+                 'RSS'=numeric(),
+                 'Model'=character(),stringsAsFactors = F)
+for (i in 1:length(predictors.powerset)){#计算出书上的表 8.10
+  terms<-predictors.powerset[[i]]
+  lm.p<-lm(reformulate(terms,response = "O2UP.log"),data=data)
+  Cp_p[i,'Model']<-paste(terms,collapse = " ")
+  Cp_p[i,'p']<-lm.p$rank
+  Cp_p[i,'RSS']<-sum(lm.p$residuals^2)
+  Cp_p[i,"Cp"]<-Cp_p[i,"RSS"]/sigma2+2*Cp_p[i,'p']-n
+  Cp_p[i,"R2"]<-1-Cp_p[i,"RSS"]/SYY
+}
+Cp_p<-dplyr::arrange(Cp_p,p,Cp)
+with(Cp_p,plot(p,Cp-p))
+with(Cp_p,lines(p[c(1,6,16,26,31)],(Cp-p)[c(1,6,16,26,31)],col="red"))
+abline(h=0,lty=2)
+```
+由$C_p$统计量的公式：
+\begin{eqnarray}
+  C_p&=&\frac{RSS_p}{\hat \sigma^2}+2p-n\\
+  &=&(k'-p)(F_p-1)+p
+\end{eqnarray}
+$F_p\le 2$等价于$C_p\le k'=6$。我们找出所有$C_p\le6$的模型
+
+```{r}
+Cp_p[Cp_p$Cp<=6,]
+```
+
+## 8.7.2
+
+```{r,warning=FALSE}
+attach(data)
+scatterplotMatrix(~BOD+TKN+TS+TVS+COD+O2UP,data=data,
+                  smoother=FALSE,reg.line=FALSE)
+```
+由于`O2UP`尺度从0.3到36.0，横跨了几个数量级，应对它做对数变换。下面用 Box-Cox 似然比检验。
+
+```{r,warning=F}
+boxCox(O2UP~BOD+TKN+TS+TVS+COD)
+summary(powerTransform(O2UP~BOD+TKN+TS+TVS+COD))
+```
+
+于是我们对`O2UP`做对数变换，并重新做散点图矩阵
+```{r}
+scatterplotMatrix(~BOD+TKN+TS+TVS+COD+O2UP.log,data=data,
+                  smoother=FALSE,reg.line=FALSE,
+                  id.n=n,id.cex=0.7)
+```
+我们看到第17个点的TVS值很不寻常，在下面的分析中，我们先将第17个案例去掉，最后再单独考虑它的影响。
+
+我们下面考虑是否对 predictors 做变换。
+```{r}
+summary(b1 <- powerTransform(cbind(BOD, TKN, TS, TVS, COD) ~ 1,
+                             data=data, subset=-17))
+```
+并没有很显著地拒绝“不用做变换”地原假设。下面我们用未作变换地predictors继续分析。
+
+```{r}
+knitr::kable(
+  summary(lm.tot<-lm(reformulate(predictors,response =
+                                   "O2UP.log"),data=data,subset = -17))$coef)
+```
+
+没有一个predictor是显著的，这提示我们需要进行变量选择。
+
+在8.7.1中，最小的$C_p$统计量（高斯模型中等价于最小的AIC）的模型为`O2UP.log ~ TS + COD`，去掉第17个点后再计算所有子集模型的$C_p$，仍选出该子集。
+
+```{r}
+knitr::kable(
+  summary(lm.best<-lm(O2UP.log~TS+COD,data=data,subset=-17))$coef)
+```
+
+`TS`与`COD`在0.05水平下显著。另外查看散点图我们发现，被删除的第17个数据点的`TS`，`COD`值并无异常，它对拟合结果并不会造成多大影响。
+
+```{r}
+residualPlot(lm.best,id.n=length(lm.best$residuals))
+```
+
+除了第1个和第20个点，其余点的残差是正常的。
+
+
+
+# 8.9
+
+\begin{equation}
+  \mathrm{Var}(\hat{\bm{\beta}}^*|X)=\sigma^2 (\mathcal{X}'\mathcal{X})^{-1}
+\end{equation}
+其中，
+\begin{eqnarray}
+  (\mathcal{X}'\mathcal{X})^{-1}&=&\left(
+    \begin{array}{cc}
+      SX_1 X_1 & SX_1 X_2\\
+      SX_2 X_1 & SX_2 X_2\\
+    \end{array}\right)^{-1}\\
+  &=&\frac{1}{SX_1 X_1\cdot SX_2 X_2-(SX_1 X_2)^2}\left(
+    \begin{array}{cc}
+      SX_2 X_2 & -SX_1 X_2\\
+      -SX_2 X_1 & SX_1 X_1\\
+    \end{array}\right)
+\end{eqnarray}
+利用
+\begin{equation}
+  R_{12}^2=\frac{(SX_1 X_2)^2}{SX_1 X_1 SX_2 X_2}
+\end{equation}
+\begin{eqnarray}
+  \mathrm{Var}(\hat \beta_1)&=&\sigma^2\frac{1}{SX_1 X_1\cdot SX_2 X_2-(SX_1 X_2)^2} SX_2 X_2\\
+  &=&\sigma^2 \frac{1}{SX_1 X_1 \cdot SX_2 X_2 (1-R_{12}^2)} SX_2 X_2\\
+  &=&\frac{\sigma^2}{1-R_{12}^2}\frac{1}{SX_1 X_1}
+\end{eqnarray}
+
+# 8.10
+
+为了解释的方便，不妨将$X_j$放到最后一列，记为$X_p$。记$\bm{A}=\bm{X}'\bm{X}$，为$(p-1)\times(p-1)$对称阵。则
+\begin{equation}
+  \mathrm{Var}(\hat \beta_p)=\sigma^2 [\bm{A}^{-1}]_{pp}
+\end{equation}
+利用习题 2.7.7 （扫描算法）的结果（将那里的$Y$取为$X_p$），当从第0个支点扫描到第$p-1$个支点时，
+\begin{equation}
+  \text{Sweep}\bm{A}[0,1,2,...,p-1]=\left(
+    \begin{array}{cc}
+      (\bm{X}'\bm{X})^{-1}&\hat{\bm{\beta}_p}\\
+      -\hat{\bm{\beta}'_p}&RSS_p
+    \end{array}
+  \right)
+\end{equation}
+其中$RSS_p$是第$p$个变量$X_p$对其余$(p-1+1)$个变量（$\{\bm{1},X_1,..,X_{p-1}\}$）回归的残差平方和。
+
+利用 2.7.6 的结论，再扫描第$p$个支点后，得到矩阵$\bm{A}^{-1}$，而扫描算法对第$k$个支点的变换：$b_{kk}=\frac{1}{a_{kk}}$可知
+\begin{eqnarray}
+  [\bm{A}^{-1}]_{pp}&=&[\text{Sweep}\bm{A}[0,1,2,...,p-1,p]]_{pp}\\
+                    &=& 1/[\text{Sweep}\bm{A}[0,1,2,...,p-1]]_{pp}\\
+                    &=& \frac{1}{RSS_p}
+\end{eqnarray}
+所以
+\begin{eqnarray}
+  \mathrm{Var}(\hat \beta_p)&=&\frac{\sigma^2}{RSS_p}\\
+  &=&\frac{\sigma^2}{SX_p X_p(1-R_p^2)}
+\end{eqnarray}
