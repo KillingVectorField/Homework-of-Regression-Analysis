@@ -1,0 +1,77 @@
+---
+title: "应用回归分析 第 10 章"
+author:
+  - 邵智轩
+  - 1400012141
+  - 物理学院
+documentclass: ctexart
+output:
+  rticles::ctex:
+    fig_caption: no
+    number_sections: no
+    toc: no
+classoption: "hyperref,"
+header-includes:
+  - \usepackage{mathtools}
+  - \usepackage{amsmath,amsfonts,amssymb,amsthm,bm,upgreek}
+  - \usepackage[mathscr]{eucal}
+---
+
+# 习题
+
+```{r}
+DATA<-data.frame('X'=c(0,5,2,3,2,NA),
+                 'Y'=c(0,5,3,2,NA,2))
+plot(DATA)
+```
+
+## 删除不完全观测的案例后进行拟合
+
+```{r}
+summary(lm.CC<-lm(Y~X,data = DATA,na.action = na.omit))
+```
+
+## 根据类似案例填补遗失数据方法填补遗失数据后进行拟合
+
+```{r}
+DATA.sameImputed<-data.frame('X'=c(0,5,2,3,2,3),
+                         'Y'=c(0,5,3,2,3,2))
+lm.sameImputed<-lm(Y~X,data = DATA.sameImputed)
+lm.sameImputed$df.residual<-lm.sameImputed$df.residual-2#须扣除填补数据的自由度
+summary(lm.sameImputed)
+```
+
+## 根据已观测数据建立回归模型填补数据后进行拟合
+
+用完全案例（complete cases)的数据，用`Y~X`的OLS填补`Y`的缺失值，用`X~Y`的OLS填补`X`的缺失值。
+```{r}
+Y_5<-predict(lm.CC,data.frame('X'=2));Y_5
+X_Y.CC<-lm(X~Y,data = DATA,na.action = na.omit)
+X_6<-predict(X_Y.CC,data.frame('Y'=2));X_6
+DATA.regImputed<-data.frame('X'=c(0,5,2,3,2,X_6),
+                           'Y'=c(0,5,3,2,Y_5,2))
+plot(DATA.regImputed,col=c(rep('black',4),rep('red',2)))
+lm.regImputed<-lm(Y~X,data=DATA.regImputed)
+lm.regImputed$df.residual<-lm.regImputed$df.residual-2
+summary(lm.regImputed)
+```
+
+## 迭代填补法
+
+```{r}
+beta=beta_new=alpha=alpha_new=c(0,1)
+epsilon<-1e-8
+Delta<-Inf
+X<-DATA$X
+Y<-DATA$Y
+while (Delta>=epsilon){
+  X[6]<-alpha[1]+alpha[2]*Y[6]
+  Y[5]<-beta[1]+beta[2]*X[5]
+  beta_new<-lm(Y~X)$coef
+  alpha_new<-lm(X~Y)$coef
+  Delta<-max(abs(c(beta_new-beta,alpha_new-alpha)))
+  beta<-beta_new; alpha<-alpha_new
+}
+cat('beta:', beta_new,'\n', 'alpha:',alpha_new,'\n',
+    'X[6]:', X[6], 'Y[5]:',Y[5])
+```
